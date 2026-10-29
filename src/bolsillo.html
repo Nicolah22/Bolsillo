@@ -273,6 +273,8 @@ button.st.pay{background:var(--accent);color:#fff}
 .chip.metachip{margin-left:auto;border-color:color-mix(in srgb,var(--save) 50%,var(--line));color:var(--save)}
 .chip.metachip[aria-pressed="true"]{background:var(--save);border-color:var(--save);color:#fff}
 .metabox{display:grid;gap:8px;background:color-mix(in srgb,var(--save) 9%,transparent);border-radius:10px;padding:10px 12px;order:9}
+.view.tema{display:grid;grid-template-columns:repeat(3,1fr)}
+.view.tema button{padding:8px 6px}
 .chip i.sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
 .catman{display:grid;gap:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg)}
 .catman .mini{margin:0}
@@ -402,7 +404,11 @@ svg text{fill:var(--muted);font-family:var(--body);font-size:11px}
     </div></div>
   </header>
   <section class="panel ajustes" id="ajustes" hidden>
-    <div class="panel-head"><h2>Qué quieres ver</h2><button type="button" class="linkbtn" id="ajCerrar">Listo</button></div>
+    <div class="panel-head"><h2>Apariencia</h2><button type="button" class="linkbtn" id="ajCerrar">Listo</button></div>
+    <div class="view tema" role="group" aria-label="Tema"><button type="button" data-tema="auto">Automático</button><button type="button" data-tema="light">Claro</button><button type="button" data-tema="dark">Oscuro</button></div>
+    <p class="mini" style="margin:0">Automático sigue el modo claro u oscuro de tu celular.</p>
+    <div class="divider"></div>
+    <div class="panel-head"><h2>Qué quieres ver</h2></div>
     <label class="sw-row"><input type="checkbox" id="opFijos"><span><b>Gastos fijos</b><small>Arriendo, servicios y demás pagos de cada mes, con su estado.</small></span></label>
     <label class="sw-row"><input type="checkbox" id="opRapidos"><span><b>Gastos rápidos</b><small>Botones de un toque en el formulario de gastos.</small></span></label>
     <label class="sw-row"><input type="checkbox" id="opCtas"><span><b>Tus cuentas</b><small>Cuánto tienes en Efectivo, Nequi, Daviplata… y mover plata entre ellas.</small></span></label>
@@ -1217,6 +1223,18 @@ function aplicarOpciones(){
 }
 [["opFijos","fijos"],["opRapidos","rapidos"],["opCmp","cmp"],["opCtas","ctas"]].forEach(([id,k])=>$(id).onchange=()=>{opciones={...opciones,[k]:$(id).checked};aplicarOpciones();renderRapidos();render();guardarCats()});
 $("ajBtn").onclick=()=>{const a=$("ajustes");a.hidden=!a.hidden;$("ajBtn").setAttribute("aria-expanded",!a.hidden);aplicarOpciones()};
+/* Tema claro / oscuro elegido en este dispositivo */
+const temaOriginal=document.documentElement.getAttribute("data-theme");
+function aplicarTema(t){
+  const R=document.documentElement;
+  if(t==="light"||t==="dark")R.setAttribute("data-theme",t);
+  else if(temaOriginal)R.setAttribute("data-theme",temaOriginal);else R.removeAttribute("data-theme");
+  document.querySelectorAll(".view.tema button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tema===(t||"auto")));
+  window.dispatchEvent(new CustomEvent("bolsillo-tema"));
+}
+let temaGuardado="auto";try{temaGuardado=localStorage.getItem("bolsillo.tema")||"auto"}catch{}
+aplicarTema(temaGuardado);
+document.querySelectorAll(".view.tema button").forEach(b=>b.onclick=()=>{try{localStorage.setItem("bolsillo.tema",b.dataset.tema)}catch{};aplicarTema(b.dataset.tema)});
 $("ajCerrar").onclick=()=>{$("ajustes").hidden=true;$("ajBtn").setAttribute("aria-expanded","false")};
 
 /* ---------- Gastos rápidos ---------- */

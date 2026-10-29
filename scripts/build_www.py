@@ -112,6 +112,17 @@ function avisoCopia(){
   A.querySelector("button").onclick=()=>$("bkDown").click();
 }
 {const _render=render;render=function(){_render();avisoCopia()}}
+/* Barra de estado de Android acorde al tema */
+function barraEstado(){
+  const SB=window.Capacitor?.Plugins?.StatusBar;if(!SB||!window.Capacitor?.isNativePlatform?.())return;
+  const R=document.documentElement,t=R.getAttribute("data-theme");
+  const oscuro=t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
+  SB.setStyle({style:oscuro?"DARK":"LIGHT"}).catch(()=>{});
+  SB.setBackgroundColor({color:oscuro?"#11161c":"#eef1f4"}).catch(()=>{});
+}
+window.addEventListener("bolsillo-tema",barraEstado);
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",barraEstado);
+barraEstado();
 try{
   const App=window.Capacitor?.Plugins?.App;
   App?.addListener?.("backButton",()=>{
