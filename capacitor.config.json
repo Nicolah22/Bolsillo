@@ -1,0 +1,6 @@
+{
+  "appId": "co.bolsillo.app",
+  "appName": "Bolsillo",
+  "webDir": "www",
+  "android": { "backgroundColor": "#eef1f4" }
+}

@@ -1,0 +1,58 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Preparar la app (www)
+        run: python3 scripts/build_www.py
+
+      - name: Copiar la app al proyecto Android
+        run: npx cap sync android
+
+      - name: Compilar APK firmada
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../Bolsillo.apk
+
+      - name: Guardar APK (artefacto)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bolsillo-apk
+          path: Bolsillo.apk
+
+      - name: Publicar versión
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Bolsillo 1.0.${{ github.run_number }}
+          body: |
+            APK lista para instalar en Android.
+            Descarga **Bolsillo.apk** y ábrela en el celular. Si ya tenías Bolsillo instalado, se actualiza sin perder los datos.
+          files: Bolsillo.apk
+          make_latest: true
