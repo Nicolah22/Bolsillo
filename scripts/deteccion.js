@@ -225,7 +225,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
       const f=s.fecha||fechaDe(s.cuando);
       const hora=new Date(s.cuando).toLocaleTimeString("es-CO",{hour:"numeric",minute:"2-digit"});
       w.innerHTML=`<div class="det-top"><div><span class="q"></span><small></small></div><b></b></div><div class="det-txt"></div>
-        <div class="det-f"><label class="field full"><span class="label">Es un…</span><select class="tp"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option><option value="traspaso">Movimiento entre mis cuentas</option></select></label>
+        <div class="det-f"><label class="field full"><span class="label">Es un…</span><select class="tp"><option value="gasto">Gasto</option><option value="ingreso">Ingreso</option><option value="traspaso">Movimiento entre mis cuentas</option><option value="pres_sale">Préstamo que hice</option><option value="pres_entra">Abono de un préstamo</option></select></label>
         <span class="zona" style="display:contents"></span>
         <label class="field"><span class="label">Monto</span><input class="mo" inputmode="decimal"></label>
         <label class="field"><span class="label">Fecha</span><input class="fe" type="date"></label>
@@ -239,12 +239,21 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
       w.querySelector(".det-txt").textContent=s.textos.join("\n\n");
       w.querySelector(".det-txt").style.whiteSpace="pre-line";
       const tp=w.querySelector(".tp"),zona=w.querySelector(".zona");
-      tp.value=s.tipo;w.querySelector(".mo").value=s.monto.toLocaleString("es-CO");w.querySelector(".fe").value=f;w.querySelector(".no").value=s.nota||"";
+      const quien=s.tipo==="gasto"?(s.comercio||""):(s.de||"");const clave=quien.toUpperCase();
+      const nomLindo=quien?quien.toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase()):"";
+      tp.value=cfg.prestamos?.[clave]&&s.tipo!=="traspaso"?(s.tipo==="gasto"?"pres_sale":"pres_entra"):s.tipo;w.querySelector(".mo").value=s.monto.toLocaleString("es-CO");w.querySelector(".fe").value=f;w.querySelector(".no").value=s.nota||"";
       const opts=(sel,arr,v)=>{arr.forEach(x=>{const o=document.createElement("option");o.textContent=x;sel.append(o)});if(v)sel.value=v};
       const conCuentas=extra=>{const set=[...L];extra.forEach(x=>{if(x&&!set.includes(x))set.push(x)});return set};
       function zonaPintar(){
         zona.innerHTML="";const t=tp.value;
-        if(t==="traspaso"){
+        if(t.startsWith("pres_")){
+          const lista=personas();const sug=lista.find(p=>quien&&esMio(quien,p))||nomLindo;
+          zona.innerHTML=`<label class="field"><span class="label">${t==="pres_sale"?"¿A quién?":"¿Quién te pagó?"}</span><input class="pe" maxlength="40" list="detPers"><datalist id="detPers"></datalist></label><label class="field"><span class="label">Cuenta</span><select class="cu"></select></label>`;
+          lista.forEach(x=>{const o=document.createElement("option");o.value=x;zona.querySelector("datalist").append(o)});
+          zona.querySelector(".pe").value=sug;
+          opts(zona.querySelector(".cu"),conCuentas([s.desde,s.hacia]),s.desde||s.hacia);
+          if(t==="pres_sale"&&w.querySelector(".no").value===nomLindo)w.querySelector(".no").value="";
+        }else if(t==="traspaso"){
           zona.innerHTML=`<label class="field"><span class="label">Desde</span><select class="de"></select></label><label class="field"><span class="label">Hacia</span><select class="ha"></select></label>`;
           const cs=conCuentas([s.desde,s.hacia]);
           const de=zona.querySelector(".de"),ha=zona.querySelector(".ha");
@@ -258,7 +267,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
           opts(cu.querySelector("select"),conCuentas([s.desde,s.hacia]),t==="gasto"?(s.desde||s.hacia):(s.hacia||s.desde));
           zona.append(cat,cu);
         }
-        w.querySelector(".ok").textContent=t==="traspaso"?"Agregar movimiento entre cuentas":t==="gasto"?"Agregar gasto":"Agregar ingreso";
+        w.querySelector(".ok").textContent=t==="pres_sale"?"Agregar préstamo":t==="pres_entra"?"Agregar abono":t==="traspaso"?"Agregar movimiento entre cuentas":t==="gasto"?"Agregar gasto":"Agregar ingreso";
       }
       tp.onchange=zonaPintar;zonaPintar();
       w.querySelector(".det-dup").hidden=!yaRegistrado(s);
@@ -267,7 +276,13 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
         const t=tp.value,monto=parseMonto(w.querySelector(".mo").value),fecha=w.querySelector(".fe").value||f,nota=w.querySelector(".no").value.trim();
         if(!(monto>0)){toast("Revisa el monto");return}
         let m;
-        if(t==="traspaso"){
+        if(t.startsWith("pres_")){
+          const per=normPersona(zona.querySelector(".pe").value),cu=zona.querySelector(".cu").value;
+          if(!per){toast(t==="pres_sale"?"Escribe a quién le prestaste":"Escribe quién te pagó");zona.querySelector(".pe").focus();return}
+          asegurarCuenta(cu);
+          m={tipo:"prestamo",cat:"Préstamo",dir:t==="pres_sale"?"sale":"entra",persona:per,origen:"mes",monto,medio:cu,fecha,nota};
+          if(clave){cfg.prestamos={...(cfg.prestamos||{}),[clave]:per};guardarLS(LS_C,cfg)}
+        }else if(t==="traspaso"){
           const de=zona.querySelector(".de").value,ha=zona.querySelector(".ha").value;
           if(!de){toast("Elige desde qué cuenta salió");return}
           if(de===ha){toast("El origen y el destino son la misma cuenta");return}
@@ -279,9 +294,10 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
           asegurarCuenta(cu);
           m={tipo:t,cat:ca,monto,medio:cu,fecha,nota};
           if(t==="gasto"&&s.comercio){cfg.comercios[s.comercio.toUpperCase()]=ca;guardarLS(LS_C,cfg)}
+          if(clave&&cfg.prestamos?.[clave]){delete cfg.prestamos[clave];guardarLS(LS_C,cfg)}
         }
         m.creado=new Date().toISOString();m.detectado=true;
-        try{await store.save(m,"n"+uid());quitar(s.ids);toast(t==="traspaso"?`${m.medio} → ${m.hacia} · ${fmt.format(monto)}`:`${t==="gasto"?"Gasto":"Ingreso"} agregado · ${fmt.format(monto)}`)}
+        try{await store.save(m,"n"+uid());quitar(s.ids);toast(m.tipo==="prestamo"?`${m.dir==="sale"?"Préstamo a ":"Abono de "}${m.persona} · ${fmt.format(monto)}`:t==="traspaso"?`${m.medio} → ${m.hacia} · ${fmt.format(monto)}`:`${t==="gasto"?"Gasto":"Ingreso"} agregado · ${fmt.format(monto)}`)}
         catch{toast("No se pudo guardar")}
       };
       panel.append(w);
