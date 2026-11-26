@@ -131,7 +131,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
   async function revisarEstado(){
     let disp=true;
     try{const r=await NB?.estado();activo=!!r?.activo;if(r&&r.disponible===false)disp=false}catch{activo=false}
-    if(!disp){cfgBox.querySelectorAll(":scope > :not(.divider):not(.panel-head)").forEach(e=>e.hidden=true);
+    if(!disp){cfgBox.querySelectorAll(":scope > :not(.divider):not(.panel-head):not(.det-no)").forEach(e=>e.hidden=true);
       if(!cfgBox.querySelector(".det-no")){const p=document.createElement("p");p.className="mini det-no";p.style.margin="0";
         p.textContent="Esta versión de Bolsillo no lee notificaciones, porque Google bloquea esa función en las apps instaladas fuera de la Play Store. Para usarla, instala la versión \"con lector\".";cfgBox.append(p)}
       return}
