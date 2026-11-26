@@ -277,6 +277,10 @@ button.st.pay{background:var(--accent);color:#fff}
 .view.tema button{padding:8px 6px}
 .cta-ed.g{grid-template-columns:minmax(0,1fr) auto;row-gap:6px;padding-bottom:8px;border-bottom:1px dotted var(--line)}
 .cta-ed.g .gmfsel,.cta-ed.g .gmftope{grid-column:1/-1;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 8px;font-size:13px;width:100%;min-width:0}
+.cta .gmfdesde{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.cta .gmfdesde input{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:8px;padding:4px 6px;font-size:12px}
+.cta .gmfdesde .chip{padding:4px 10px;font-size:12px}
+.cta .gmfdesde .lnk{all:unset;cursor:pointer;color:var(--accent,#2563eb);text-decoration:underline;font-size:12px}
 .cta .gmfline{grid-column:1/-1;font-size:12px;color:var(--muted);margin-top:-2px}
 .chip i.sw{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:0}
 .catman{display:grid;gap:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg)}
@@ -1176,8 +1180,9 @@ function gmfCalculo(){
   for(const k in grupos){
     const [c,mes]=k.split("|");const md=gmfModo(c);
     const lista=grupos[k].sort((a,b)=>a.fecha.localeCompare(b.fecha)||(a.creado||"").localeCompare(b.creado||""));
-    let acum=0,imp=0,ult=lista[0].fecha;
-    lista.forEach(m=>{const antes=acum;acum+=m.monto;ult=m.fecha;if(md)imp+=Math.max(0,acum-Math.max(antes,md.tope))*0.004});
+    let acum=0,imp=0,ult=lista[0].fecha;const desde=md&&gmf[c]?.desde?.[mes];
+    lista.forEach(m=>{const antes=acum;acum+=m.monto;ult=m.fecha;if(!md)return;
+      if(desde&&m.fecha>=desde)imp+=m.monto*0.004;else imp+=Math.max(0,acum-Math.max(antes,md.tope))*0.004});
     uso[k]=acum;
     const v=Math.round(imp);
     if(md&&v>0)quiere["gmf-"+c.toLowerCase().replace(/[^a-z0-9]+/g,"_")+"-"+mes]={tipo:"gasto",cat:"4x1000",monto:v,medio:c,fecha:ult,nota:`4x1000 de ${c}`,auto:true};
@@ -1207,7 +1212,7 @@ function renderCuentas(){
       const sel=d.querySelector(".gmfsel"),tp=d.querySelector(".gmftope");
       GMF_OPS.forEach(([v,t])=>{const o=document.createElement("option");o.value=v;o.textContent=t;sel.append(o)});
       sel.value=gmf[c]?.modo||"no";tp.hidden=sel.value!=="otro";if(gmf[c]?.tope)tp.value=(+gmf[c].tope).toLocaleString("es-CO");
-      const guardarG=()=>{const v=sel.value;const g={...gmf};if(v==="no")delete g[c];else g[c]=v==="otro"?{modo:"otro",tope:parseMonto(tp.value)||0}:{modo:v};gmf=g;render();guardarCats({},v==="no"?`${c}: sin 4x1000`:`${c}: 4x1000 configurado`)};
+      const guardarG=()=>{const v=sel.value;const g={...gmf};if(v==="no")delete g[c];else g[c]={...(v==="otro"?{modo:"otro",tope:parseMonto(tp.value)||0}:{modo:v}),...(gmf[c]?.desde?{desde:gmf[c].desde}:{})};gmf=g;render();guardarCats({},v==="no"?`${c}: sin 4x1000`:`${c}: 4x1000 configurado`)};
       sel.onchange=()=>{tp.hidden=sel.value!=="otro";if(sel.value==="otro"){tp.focus();return}guardarG()};
       tp.onchange=()=>{const v=parseMonto(tp.value);if(v>=0)tp.value=v.toLocaleString("es-CO");guardarG()};
       d.children[1].onclick=()=>{if(S[c]){toast(`${c} todavía tiene ${fmt.format(S[c])}. Pásalo a otra cuenta antes de quitarla.`);return}
@@ -1228,12 +1233,32 @@ function renderCuentas(){
     const md=gmfModo(c);
     if(md){const u=uso[c+"|"+mk]||0,g=movs.find(m=>m.auto&&m.cat==="4x1000"&&m.medio===c&&m.fecha.startsWith(mk));
       const s=document.createElement("small");s.className="gmfline";
-      s.textContent=md.tope?(u<=md.tope?`4x1000: llevas ${fmt.format(u)} de ${fmt.format(md.tope)} sin cobro este mes`:`4x1000: pasaste el tope · cobrado ${fmt.format(g?.monto||0)} este mes`):`4x1000 este mes: ${fmt.format(g?.monto||0)}`;
+      s.textContent=gmf[c]?.desde?.[mk]?`4x1000 este mes: ${fmt.format(g?.monto||0)}`:md.tope?(u<=md.tope?`4x1000: llevas ${fmt.format(u)} de ${fmt.format(md.tope)} sin cobro este mes`:`4x1000: pasaste el tope · cobrado ${fmt.format(g?.monto||0)} este mes`):`4x1000 este mes: ${fmt.format(g?.monto||0)}`;
       if(md.tope&&u>md.tope*0.85&&u<=md.tope)s.style.color="var(--warn)";if(md.tope&&u>md.tope)s.style.color="var(--out)";
-      d.append(s)}
+      d.append(s);
+      if(md.tope)d.append(gmfDesdeBox(c,mk,g))}
     B.append(d)});
   const t=document.createElement("div");t.className="cta tot";t.innerHTML=`<span>Total en cuentas</span><b></b>`;t.querySelector("b").textContent=fmt.format(tot);B.append(t);
 }
+/* "Ya me lo están cobrando": el banco cuenta movimientos que no están en Bolsillo,
+   así que desde esa fecha se cobra todo lo que sale. Solo aplica a ese mes. */
+function gmfDesdeBox(c,mk,g){
+  const w=document.createElement("div");w.className="gmfdesde";
+  const desde=gmf[c]?.desde?.[mk];
+  const guardar=(f,msg)=>{const d={...(gmf[c]?.desde||{})};if(f)d[mk]=f;else delete d[mk];
+    gmf={...gmf,[c]:{...gmf[c],desde:d}};render();guardarCats({},msg)};
+  if(desde){const [y,mo,da]=desde.split("-");
+    w.innerHTML=`<span></span><button type="button" class="lnk">Quitar</button>`;
+    w.children[0].textContent=`Cobrando todo desde el ${+da}/${+mo} (solo este mes)`;
+    w.children[1].onclick=()=>guardar(null,`${c}: vuelve a contar el tope`);return w}
+  w.innerHTML=`<button type="button" class="lnk">¿${c} ya te lo está cobrando?</button>`;
+  w.children[0].onclick=()=>{
+    const hy=hoy(),min=mk+"-01",fin=new Date(+mk.slice(0,4),+mk.slice(5,7),0).getDate(),max=mk+"-"+String(fin).padStart(2,"0");
+    w.innerHTML=`<span>¿Desde qué día?</span><input type="date"><button type="button" class="chip ok">Aplicar</button><button type="button" class="lnk">Cancelar</button>`;
+    const i=w.querySelector("input");i.min=min;i.max=max;i.value=hy>=min&&hy<=max?hy:min;
+    w.querySelector(".chip").onclick=()=>{if(!i.value)return;guardar(i.value,`${c}: 4x1000 desde el ${i.value.slice(8)}/${i.value.slice(5,7)}`)};
+    w.querySelector(".lnk").onclick=()=>renderCuentas()};
+  return w}
 $("editCtas").onclick=()=>{editCtas=!editCtas;renderCuentas()};
 
 /* Mover plata: entre cuentas, de una cuenta a un ahorro, o de un ahorro a una cuenta */
