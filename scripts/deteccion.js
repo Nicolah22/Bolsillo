@@ -6,7 +6,8 @@
 function montoDe(txt){
   const conPeso=txt.match(/\$\s?([\d.,]+\d)/);
   const sinPeso=txt.match(/(?<![\d*\/:])(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?)(?![\d\/:])/);
-  const crudo=conPeso?conPeso[1]:sinPeso?sinPeso[1]:null;
+  const conVerbo=txt.match(/(?:envi[oó]|enviaste|recibiste|pagaste|transferiste|pagaron|mand[oó]|lleg[oó])\s+(?:un total de\s+)?\$?\s?(\d[\d.,]*\d|\d)(?![\d\/:])/i);
+  const crudo=conPeso?conPeso[1]:sinPeso?sinPeso[1]:conVerbo?conVerbo[1]:null;
   if(!crudo)return null;
   let s=crudo;
   const ip=s.lastIndexOf("."),ic=s.lastIndexOf(",");
@@ -36,7 +37,7 @@ function bancoDe(n){
   for(const f of fuentes)for(const[nombre,re]of BANCOS)if(re.test(f))return nombre;
   return (n.app||"Otra cuenta").trim();
 }
-const RE_ENTRA=/recibiste|recibi[oó]|recepci[oó]n|te pagaron|te pag[oó]|le enviaron|pago recibido|ingreso de|te mand[oó]|te mandaron|te lleg[oó]|te enviaron|te consignaron|consignaci[oó]n|abono a tu|recibimos|ingres[oó] a tu|te transfiri/i;
+const RE_ENTRA=/te envi[oó]|te transfiri[oó]|recibiste|recibi[oó]|recepci[oó]n|te pagaron|te pag[oó]|le enviaron|pago recibido|ingreso de|te mand[oó]|te mandaron|te lleg[oó]|te enviaron|te consignaron|consignaci[oó]n|abono a tu|recibimos|ingres[oó] a tu|te transfiri/i;
 const RE_SALE=/transferiste|enviaste|env[ií]o de plata|pagaste|compraste|compra |pago (exitoso|de|a |por)|retiraste|retiro|d[eé]bito|cargo|giraste|recargaste/i;
 function parsearNoti(n){
   const txt=((n.titulo||"")+" · "+(n.texto||"")).replace(/\s+/g," ").trim();
@@ -46,7 +47,7 @@ function parsearNoti(n){
   if(!dir)return null;
   const cuenta=bancoDe(n);
   const destino=(txt.match(/a la cuenta\s*\*?\s*(\d{3,})/i)||txt.match(/al (?:n[uú]mero|celular)\s*\*?\s*(\d{3,})/i)||[])[1]||null;
-  let de=(txt.match(/\bde\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+(?:\s+[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+)+)/)||[])[1]||null;
+  let de=(txt.match(/([A-ZÁÉÍÓÚÑ]{2,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,})+)\s+te\s+(?:envi|pag|mand|transf)/)||[])[1]||(txt.match(/\bde\s+([A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+(?:\s+[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ]+)+)/)||[])[1]||null;
   const comercio=(txt.match(/\ben\s+([A-Z0-9][A-Z0-9 &.\-*']{2,40}?)(?=\s+(?:el|con|desde|por|a las)\b|[.,·]|$)/)||[])[1]||null;
   let fecha=null;const f=txt.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
   if(f){const y=f[3].length===2?"20"+f[3]:f[3];fecha=`${y}-${String(f[2]).padStart(2,"0")}-${String(f[1]).padStart(2,"0")}`}

@@ -28,6 +28,8 @@ public class NotiBancoService extends NotificationListenerService {
         "(?i)(recib|transfer|envi|envío|pag|compr|retir|abon|consign|lleg|plata|dinero|d[eé]bit|cargo|movimiento|giro)");
 
     static final String DIAG = "recientes";
+    private static final Pattern VERBO_MONTO = Pattern.compile(
+        "(?i)(envi[oó]|enviaste|recibiste|pagaste|transferiste|pagaron|mand[oó]|lleg[oó]|por|de)\\s+(un total de\\s+)?\\$?\\s?\\d");
 
     @Override
     public void onListenerConnected() {
@@ -78,8 +80,9 @@ public class NotiBancoService extends NotificationListenerService {
             String todo = titulo + " " + texto;
             SharedPreferences pr = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
             pr.edit().putInt("vistas", pr.getInt("vistas", 0) + 1).putLong("ultima", System.currentTimeMillis()).apply();
-            if (!MONTO.matcher(todo).find()) return;
             boolean clave = CLAVE.matcher(todo).find();
+            // Nequi a veces escribe el monto sin "$" ni puntos: "PAULA te envió 10, ¡lo mejor!"
+            if (!MONTO.matcher(todo).find() && !(clave && VERBO_MONTO.matcher(todo).find())) return;
             String app;
             try {
                 app = getPackageManager().getApplicationLabel(
