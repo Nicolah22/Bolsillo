@@ -1130,7 +1130,8 @@ let cuentasL=null, editCtas=false, moverEdit=null;
 const listaCuentas=()=>{const base=cuentasL||CTAS_DEF;const set=[...base];movs.forEach(m=>{[m.medio,m.hacia].forEach(c=>{if(c&&c!=="Ajuste"&&!set.includes(c)&&saldoCuentas()[c])set.push(c)})});return set};
 let _sc=null,_scKey=null;
 function saldoCuentas(){
-  const key=movs.length+":"+(movs.at(-1)?.id||"")+":"+movs.reduce((a,m)=>a+m.monto,0);if(_scKey===key)return _sc;
+  /* La llave incluye todo lo que mueve el saldo de una cuenta: si cambias el medio de pago, se recalcula */
+  const key=movs.map(m=>[m.id,m.tipo,m.monto,m.medio,m.hacia||"",m.dir||"",m.previo?1:0,m.origen||"",m.sobrante?1:0,m.inicial?1:0,m.ajuste?1:0].join("~")).join("|");if(_scKey===key)return _sc;
   const r={};const add=(c,v)=>{if(!c)return;r[c]=(r[c]||0)+v};
   movs.forEach(m=>{
     if(m.previo)return;
