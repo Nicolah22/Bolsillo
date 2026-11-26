@@ -20,6 +20,17 @@
             </intent-filter>
         </activity>
 
+        <!-- Lee las notificaciones de los bancos (solo si le das permiso en Ajustes) -->
+        <service
+            android:name=".NotiBancoService"
+            android:label="Bolsillo"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

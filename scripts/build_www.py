@@ -83,10 +83,10 @@ s = s[:i] + IDB + s[j:]
 i = s.index("async function descargar(nombre,texto,tipoMime){")
 j = s.index("\n}\n", i) + 3
 DL = r'''async function descargar(nombre,texto,tipoMime){
-  const P=window.Capacitor?.Plugins;
-  if(window.Capacitor?.isNativePlatform?.()&&P?.Filesystem&&P?.Share){
-    try{const r=await P.Filesystem.writeFile({path:nombre,data:texto,directory:"CACHE",encoding:"utf8"});
-      await P.Share.share({title:nombre,url:r.uri,dialogTitle:"Guardar o enviar "+nombre});return true}
+  const FS=plug("Filesystem"),SH=plug("Share");
+  if(window.Capacitor?.isNativePlatform?.()&&FS&&SH){
+    try{const r=await FS.writeFile({path:nombre,data:texto,directory:"CACHE",encoding:"utf8"});
+      await SH.share({title:nombre,url:r.uri,dialogTitle:"Guardar o enviar "+nombre});return true}
     catch(e){if(String(e?.message||e).toLowerCase().includes("cancel"))return false;toast("No se pudo guardar el archivo");return false}}
   try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([texto],{type:tipoMime}));a.download=nombre;document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);return true}
   catch{toast("No se pudo descargar");return false}
@@ -114,7 +114,7 @@ function avisoCopia(){
 {const _render=render;render=function(){_render();avisoCopia()}}
 /* Barra de estado de Android acorde al tema */
 function barraEstado(){
-  const SB=window.Capacitor?.Plugins?.StatusBar;if(!SB||!window.Capacitor?.isNativePlatform?.())return;
+  const SB=plug("StatusBar");if(!SB||!window.Capacitor?.isNativePlatform?.())return;
   const R=document.documentElement,t=R.getAttribute("data-theme");
   const oscuro=t?t==="dark":matchMedia("(prefers-color-scheme: dark)").matches;
   SB.setStyle({style:oscuro?"DARK":"LIGHT"}).catch(()=>{});
@@ -124,7 +124,7 @@ window.addEventListener("bolsillo-tema",barraEstado);
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",barraEstado);
 barraEstado();
 try{
-  const App=window.Capacitor?.Plugins?.App;
+  const App=plug("App");
   App?.addListener?.("backButton",()=>{
     if(!$("ajustes").hidden){$("ajustes").hidden=true;return}
     if(!$("cuadrar").hidden){$("cuadrar").hidden=true;return}
@@ -135,6 +135,24 @@ try{
 }catch{}
 '''
 rep('$("fecha").value=hoy();setTipo("gasto");init();', EXTRA + '$("fecha").value=hoy();setTipo("gasto");init();')
+
+# --- acceso a los plugins nativos de Capacitor ---
+PLUG = """
+/* Plugins nativos (Filesystem, Share, App, StatusBar, NotiBanco) */
+const _plugs={};
+function plug(n){
+  if(!window.Capacitor?.isNativePlatform?.())return null;
+  if(_plugs[n])return _plugs[n];
+  try{_plugs[n]=window.Capacitor.Plugins?.[n]||window.Capacitor.registerPlugin?.(n)||null}catch{_plugs[n]=null}
+  return _plugs[n];
+}
+"""
+i=s.index("<script>")+len("<script>")
+s=s[:i]+PLUG+s[i:]
+
+# --- movimientos detectados en notificaciones ---
+DET=(ROOT/"scripts"/"deteccion.js").read_text(encoding="utf-8")
+rep('$("fecha").value=hoy();setTipo("gasto");init();', '$("fecha").value=hoy();setTipo("gasto");init();\n'+DET)
 
 # --- documento completo ---
 m = re.match(r"<title>(.*?)</title>\n", s)
@@ -147,6 +165,7 @@ doc = f'''<!doctype html>
 <meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#11161c" media="(prefers-color-scheme: dark)">
 <title>{title}</title>
+<script src="capacitor.js"></script>
 </head>
 <body>
 {s}
@@ -155,6 +174,13 @@ doc = f'''<!doctype html>
 '''
 OUT.parent.mkdir(parents=True, exist_ok=True)
 OUT.write_text(doc, encoding="utf-8")
+
+# runtime de Capacitor (para registrar los plugins nativos)
+cap = ROOT / "node_modules" / "@capacitor" / "core" / "dist" / "capacitor.js"
+if cap.exists():
+    shutil.copy(cap, OUT.parent / "capacitor.js")
+elif not (OUT.parent / "capacitor.js").exists():
+    sys.exit("build: falta @capacitor/core (npm ci)")
 
 # fuentes
 fd = OUT.parent / "fonts"; fd.mkdir(exist_ok=True)
