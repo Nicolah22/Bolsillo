@@ -3,6 +3,8 @@ package co.bolsillo.app;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.provider.Settings;
 
 import androidx.core.app.NotificationManagerCompat;
@@ -17,6 +19,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONArray;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 @CapacitorPlugin(name = "NotiBanco")
@@ -27,10 +30,21 @@ public class NotiBancoPlugin extends Plugin {
         return NotificationManagerCompat.getEnabledListenerPackages(c).contains(c.getPackageName());
     }
 
+    /** La versión "normal" de la APK no declara el servicio (Play Protect lo bloquea al instalar fuera de la Play Store). */
+    private boolean disponible() {
+        Context c = getContext();
+        Intent i = new Intent("android.service.notification.NotificationListenerService");
+        i.setPackage(c.getPackageName());
+        List<ResolveInfo> l = c.getPackageManager().queryIntentServices(i, 0);
+        return l != null && !l.isEmpty();
+    }
+
     @PluginMethod
     public void estado(PluginCall call) {
         JSObject r = new JSObject();
-        r.put("activo", activo());
+        boolean d = disponible();
+        r.put("disponible", d);
+        r.put("activo", d && activo());
         call.resolve(r);
     }
 

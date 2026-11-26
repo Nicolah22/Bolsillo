@@ -38,7 +38,18 @@ jobs:
         run: |
           set -o pipefail
           chmod +x gradlew
+          # 1) Con lector de notificaciones de bancos
           ./gradlew assembleRelease --no-daemon --stacktrace 2>&1 | tee ../gradle.log
+          cp app/build/outputs/apk/release/app-release.apk ../Bolsillo-con-lector.apk
+          # 2) Normal: sin el servicio que Play Protect bloquea fuera de la Play Store
+          python3 - <<'PY'
+          import re
+          p="app/src/main/AndroidManifest.xml";s=open(p).read()
+          s=re.sub(r"\s*<!-- Lee las notificaciones.*?</service>","",s,flags=re.S)
+          open(p,"w").write(s)
+          PY
+          ! grep -q NotiBancoService app/src/main/AndroidManifest.xml
+          ./gradlew assembleRelease --no-daemon 2>&1 | tee -a ../gradle.log
           cp app/build/outputs/apk/release/app-release.apk ../Bolsillo.apk
 
       - name: Mostrar el error de compilación
@@ -57,7 +68,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Bolsillo-apk
-          path: Bolsillo.apk
+          path: |
+            Bolsillo.apk
+            Bolsillo-con-lector.apk
 
       - name: Publicar versión
         uses: softprops/action-gh-release@v2
@@ -65,7 +78,9 @@ jobs:
           tag_name: v1.0.${{ github.run_number }}
           name: Bolsillo 1.0.${{ github.run_number }}
           body: |
-            APK lista para instalar en Android.
-            Descarga **Bolsillo.apk** y ábrela en el celular. Si ya tenías Bolsillo instalado, se actualiza sin perder los datos.
-          files: Bolsillo.apk
+            **Bolsillo.apk**: la versión normal. Se instala sin problema; si ya tenías Bolsillo, se actualiza sin perder los datos.
+            **Bolsillo-con-lector.apk**: igual, pero además lee las notificaciones de los bancos. Google Play Protect la bloquea si se instala desde el navegador o WhatsApp; ver README.
+          files: |
+            Bolsillo.apk
+            Bolsillo-con-lector.apk
           make_latest: true

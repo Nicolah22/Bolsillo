@@ -129,7 +129,12 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
   $("detNombre").onchange=()=>{cfg.nombre=$("detNombre").value.trim();guardarLS(LS_C,cfg);pintar()};
   $("detActivar").onclick=async()=>{try{await NB?.abrirAjustes()}catch{toast("Abre Ajustes → Notificaciones → Acceso a notificaciones y activa Bolsillo")}};
   async function revisarEstado(){
-    try{const r=await NB?.estado();activo=!!r?.activo}catch{activo=false}
+    let disp=true;
+    try{const r=await NB?.estado();activo=!!r?.activo;if(r&&r.disponible===false)disp=false}catch{activo=false}
+    if(!disp){cfgBox.querySelectorAll(":scope > :not(.divider):not(.panel-head)").forEach(e=>e.hidden=true);
+      if(!cfgBox.querySelector(".det-no")){const p=document.createElement("p");p.className="mini det-no";p.style.margin="0";
+        p.textContent="Esta versión de Bolsillo no lee notificaciones, porque Google bloquea esa función en las apps instaladas fuera de la Play Store. Para usarla, instala la versión \"con lector\".";cfgBox.append(p)}
+      return}
     $("detEstado").textContent=activo?"Activado":"Desactivado";$("detEstado").className=activo?"on":"off";
     $("detActivar").textContent=activo?"Cambiar en Android":"Activar";
   }
