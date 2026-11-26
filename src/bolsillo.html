@@ -388,6 +388,7 @@ svg text{fill:var(--muted);font-family:var(--body);font-size:11px}
 
 .note{font-size:12.5px;color:var(--muted);text-align:center}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:500;font-size:14px;z-index:20}
+.toast.alerta{background:var(--out);color:#fff;max-width:calc(100vw - 32px)}
 
 .summary{grid-template-columns:repeat(3,minmax(0,1fr))!important}
 @media (max-width:600px){.summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}}
@@ -1088,7 +1089,8 @@ $("form").addEventListener("submit",async e=>{
   if(editOrig?.ajuste){m.ajuste=true;m.cat=editOrig.cat;if(editOrig.sobrante)m.sobrante=true}
   if(editId){m.editado=new Date().toISOString();if(editOrig&&editOrig.monto!==monto)m.montoAnterior=editOrig.monto;else if(editOrig?.montoAnterior)m.montoAnterior=editOrig.montoAnterior}
   const id=editId||(m.fijoId&&!editId?`fijo-${m.fijoId}-${m.fijoMes}`:null); $("guardar").disabled=true;
-  try{await store.save(m,id);toast(id?"Cambios guardados":(tipo==="gasto"?"Gasto guardado":tipo==="ingreso"?"Ingreso guardado":tipo==="deuda"?(dir==="pago"?`Pago a ${m.acreedor} guardado`:`Deuda con ${m.acreedor} guardada`):tipo==="ahorro"?(dir==="sale"?`Guardaste en ${m.fondo}`:`Retiro de ${m.fondo} guardado`):dir==="sale"?`Préstamo a ${m.persona} guardado`:`Abono de ${m.persona} guardado`));
+  const avP=avisoPresupuesto(m,id);
+  try{await store.save(m,id);if(avP)toast(avP,null,true);else toast(id?"Cambios guardados":(tipo==="gasto"?"Gasto guardado":tipo==="ingreso"?"Ingreso guardado":tipo==="deuda"?(dir==="pago"?`Pago a ${m.acreedor} guardado`:`Deuda con ${m.acreedor} guardada`):tipo==="ahorro"?(dir==="sale"?`Guardaste en ${m.fondo}`:`Retiro de ${m.fondo} guardado`):dir==="sale"?`Préstamo a ${m.persona} guardado`:`Abono de ${m.persona} guardado`));
     const keepFecha=$("fecha").value;resetForm();$("fecha").value=keepFecha;
     const [y,mo]=m.fecha.split("-").map(Number);if(!verTodo&&!m.fijoMes&&(y!==cur.getFullYear()||mo!==cur.getMonth()+1)){cur=new Date(y,mo-1,1);render()}
   }catch(err){$("err").textContent=err?.code==="quota_exceeded"?"Llegaste al límite de almacenamiento. Exporta y borra movimientos viejos.":"No se pudo guardar. Revisa tu conexión e intenta de nuevo."}
@@ -1442,7 +1444,8 @@ function filaFijo(f,k,e,nota,atrasado,ult){
 async function marcarFijo(f,k){
   const id=`fijo-${f.id}-${k}`;
   const m={tipo:"gasto",monto:f.monto,cat:catsDe("gasto").includes(f.cat)?f.cat:"Otros",medio:$("medio").value||"Efectivo",fecha:hoy(),nota:f.n,creado:new Date().toISOString(),fijoId:f.id,fijoMes:k};
-  try{await store.save(m,id);toast(`${f.n} pagado · ${fmt.format(f.monto)}`,{label:"Deshacer",fn:async()=>{try{await store.remove(id)}catch{toast("No se pudo deshacer")}}})}
+  const avP=avisoPresupuesto(m,id);
+  try{await store.save(m,id);toast(avP?`${f.n} pagado. ${avP}`:`${f.n} pagado · ${fmt.format(f.monto)}`,{label:"Deshacer",fn:async()=>{try{await store.remove(id)}catch{toast("No se pudo deshacer")}}})}
   catch{toast("No se pudo guardar. Revisa tu conexión.")}
 }
 function desmarcarFijo(f,pago){
@@ -2049,8 +2052,15 @@ $("exportar").onclick=async()=>{
   await descargar(`bolsillo-${hoy()}.csv`,csv,"text/csv");
 };
 
-let tt;function toast(t,act){const e=$("toast");e.textContent=t;
+/* Aviso de presupuesto: se calcula antes de guardar para no contar dos veces el mismo gasto */
+function avisoPresupuesto(m,id){
+  if(!m||m.tipo!=="gasto"||!budgets[m.cat]||!m.fecha)return null;const mes=m.fecha.slice(0,7),b=budgets[m.cat];
+  const tot=movs.filter(x=>x.tipo==="gasto"&&x.cat===m.cat&&x.fecha?.startsWith(mes)&&x.id!==id).reduce((a,x)=>a+x.monto,0)+m.monto;
+  if(tot>b)return `⚠️ Te pasaste del presupuesto de ${m.cat}: llevas ${fmt.format(tot)} de ${fmt.format(b)}`;
+  if(tot>=b*0.9)return `Ojo: ya llevas ${fmt.format(tot)} de ${fmt.format(b)} en ${m.cat}`;
+  return null}
+let tt;function toast(t,act,alerta){const e=$("toast");e.textContent=t;e.classList.toggle("alerta",!!alerta);
   if(act){const b=document.createElement("button");b.type="button";b.textContent=act.label;b.onclick=()=>{e.hidden=true;act.fn()};e.append(b)}
-  e.hidden=false;clearTimeout(tt);tt=setTimeout(()=>e.hidden=true,act?5000:2400)}
+  e.hidden=false;clearTimeout(tt);tt=setTimeout(()=>e.hidden=true,act||alerta?5500:2400)}
 $("fecha").value=hoy();setTipo("gasto");init();
 </script>

@@ -55,6 +55,7 @@ public class NotiBancoPlugin extends Plugin {
     public void load() {
         instancia = this;
         pedirReconexion();
+        Recordatorio.programar(getContext());
     }
 
     static void avisarCompartido() {
@@ -62,6 +63,49 @@ public class NotiBancoPlugin extends Plugin {
             if (instancia != null) instancia.notifyListeners("compartido", new JSObject());
         } catch (Exception ignored) {
         }
+    }
+
+    @PluginMethod
+    public void pendientesJS(PluginCall call) {
+        Recordatorio.prefs(getContext()).edit().putInt("pend_js", call.getInt("n", 0)).apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void estadoRecordatorio(PluginCall call) {
+        JSObject r = new JSObject();
+        r.put("activo", Recordatorio.activo(getContext()));
+        r.put("hora", Recordatorio.hora(getContext()));
+        r.put("permiso", NotificationManagerCompat.from(getContext()).areNotificationsEnabled());
+        call.resolve(r);
+    }
+
+    @PluginMethod
+    public void configRecordatorio(PluginCall call) {
+        Context c = getContext();
+        boolean activo = Boolean.TRUE.equals(call.getBoolean("activo", false));
+        int hora = call.getInt("hora", 20);
+        Recordatorio.prefs(c).edit().putBoolean("rec_activo", activo).putInt("rec_hora", hora).apply();
+        Recordatorio.programar(c);
+        JSObject r = new JSObject();
+        boolean ok = NotificationManagerCompat.from(c).areNotificationsEnabled();
+        if (activo && !ok) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 33 && getActivity() != null) {
+                    androidx.core.app.ActivityCompat.requestPermissions(getActivity(), new String[]{"android.permission.POST_NOTIFICATIONS"}, 77);
+                    r.put("pidiendo", true);
+                    ok = true;
+                } else {
+                    Intent i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, c.getPackageName())
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    c.startActivity(i);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        r.put("permiso", ok);
+        call.resolve(r);
     }
 
     @PluginMethod

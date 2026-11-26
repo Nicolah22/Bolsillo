@@ -131,11 +131,14 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
   .det-f .full{grid-column:1/-1}
   .det-a{display:flex;gap:8px;flex-wrap:wrap}
   .det-a .btn{flex:1}
+  .det-abono{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:13px;background:var(--accent-soft);border-radius:8px;padding:8px 10px}
   .det-dup{font-size:12.5px;color:var(--warn);font-weight:600}
   .det-cfg{display:grid;gap:10px}
   .det-cfg input{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 10px;width:100%}
   .det-st{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:14px}
   .det-st b.on{color:var(--in)} .det-st b.off{color:var(--out)}
+  .det-rec{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:14px}
+  .det-rec select{grid-column:2;justify-self:start;border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:8px;padding:6px 8px}
   .det-diag{display:flex;justify-content:space-between;gap:10px;align-items:center}
   #detLog{display:grid;gap:8px;max-height:360px;overflow:auto}
   .det-log-it{display:grid;gap:2px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px}
@@ -150,6 +153,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
     <div class="det-st"><span>Estado: <b id="detEstado">…</b></span><button type="button" class="btn ghost" id="detActivar">Activar</button></div>
     <label class="field"><span class="label">Tu nombre como aparece en los bancos</span><input id="detNombre" maxlength="60" placeholder="Ej: Nicolás Martínez"></label>
     <p class="mini" style="margin:0">Sirve para reconocer cuando te pasas plata a ti mismo entre tus cuentas.</p>
+    <label class="det-rec"><input type="checkbox" id="recOn"><span>Recordarme en la noche si tengo movimientos por revisar</span><select id="recHora" aria-label="Hora"></select></label>
     <div class="det-diag"><span id="detDiag" class="mini"></span><button type="button" class="linkbtn" id="detVer">Ver lo que leyó</button></div>
     <div id="detLog" hidden></div>`;
   const datos=[...document.querySelectorAll("#ajustes .panel-head h2")].find(h=>h.textContent==="Tus datos");
@@ -158,6 +162,16 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
   $("detNombre").value=cfg.nombre||"";
   $("detNombre").onchange=()=>{cfg.nombre=$("detNombre").value.trim();guardarLS(LS_C,cfg);pintar()};
   $("detActivar").onclick=async()=>{try{await NB?.abrirAjustes()}catch{toast("Abre Ajustes → Notificaciones → Acceso a notificaciones y activa Bolsillo")}};
+  /* --- recordatorio de la noche --- */
+  (function(){
+    const H=$("recHora");for(let h=17;h<=23;h++){const o=document.createElement("option");o.value=h;o.textContent=(h>12?h-12:h)+":00 p. m.";H.append(o)}
+    const cargar=async()=>{try{const r=await NB.estadoRecordatorio();$("recOn").checked=!!r.activo;H.value=String(r.hora||20);H.disabled=!r.activo}catch{cfgBox.querySelector(".det-rec").hidden=true}};
+    const guardar=async()=>{const activo=$("recOn").checked;H.disabled=!activo;
+      try{const r=await NB.configRecordatorio({activo,hora:+H.value});
+        if(activo&&r&&r.permiso===false)toast("Permite las notificaciones de Bolsillo para recibir el recordatorio");
+        else toast(activo?`Te recordaré a las ${H.selectedOptions[0].textContent}`:"Recordatorio apagado")}catch{toast("No se pudo guardar")}};
+    $("recOn").onchange=guardar;H.onchange=guardar;if(NB)cargar();
+  })();
   let ultimoEstado=null;
   $("detVer").onclick=async()=>{const L=$("detLog");if(!L.hidden){L.hidden=true;$("detVer").textContent="Ver lo que leyó";return}
     let r;try{r=await NB.diagnostico()}catch{r={lista:[]}}
@@ -213,6 +227,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
 
   function pintar(){
     const sug=emparejar(crudos,cfg);
+    if(NB)Promise.resolve().then(()=>NB.pendientesJS({n:sug.length})).catch(()=>{});
     banner.hidden=!sug.length;
     banner.innerHTML=`<span>🔔 <b>${sug.length}</b> movimiento${sug.length>1?"s":""} detectado${sug.length>1?"s":""} en tus bancos</span><button type="button" class="linkbtn">${abierta?"Ocultar":"Revisar"}</button>`;
     banner.querySelector("button").onclick=()=>{abierta=!abierta;pintar();if(abierta)panel.scrollIntoView({behavior:"smooth",block:"start"})};
@@ -230,6 +245,7 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
         <label class="field"><span class="label">Monto</span><input class="mo" inputmode="decimal"></label>
         <label class="field"><span class="label">Fecha</span><input class="fe" type="date"></label>
         <label class="field full"><span class="label">Nota (opcional)</span><input class="no" maxlength="80"></label></div>
+        <div class="det-abono" hidden><span></span><button type="button" class="linkbtn">Sí, es un abono</button></div>
         <div class="det-dup" hidden>Parece que ya lo registraste. Revisa antes de agregarlo.</div>
         <div class="det-a"><button type="button" class="btn ok">Agregar</button><button type="button" class="btn ghost ig">Ignorar</button></div>`;
       const q=w.querySelector(".q");
@@ -269,7 +285,13 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
         }
         w.querySelector(".ok").textContent=t==="pres_sale"?"Agregar préstamo":t==="pres_entra"?"Agregar abono":t==="traspaso"?"Agregar movimiento entre cuentas":t==="gasto"?"Agregar gasto":"Agregar ingreso";
       }
-      tp.onchange=zonaPintar;zonaPintar();
+      const ab=w.querySelector(".det-abono");
+      const pintarAbono=()=>{
+        const debe=s.tipo==="ingreso"&&quien?deudas().find(d=>d.saldo>0&&esMio(quien,d.n)):null;
+        ab.hidden=!debe||tp.value!=="ingreso";if(ab.hidden)return;
+        ab.querySelector("span").textContent=`${debe.n} te debe ${fmt.format(debe.saldo)}. ¿Esta plata es un abono?`;
+        ab.querySelector("button").onclick=()=>{tp.value="pres_entra";zonaPintar();const pe=zona.querySelector(".pe");if(pe)pe.value=debe.n;pintarAbono()}};
+      tp.onchange=()=>{zonaPintar();pintarAbono()};zonaPintar();pintarAbono();
       w.querySelector(".det-dup").hidden=!yaRegistrado(s);
       w.querySelector(".ig").onclick=()=>quitar(s.ids);
       w.querySelector(".ok").onclick=async()=>{
@@ -279,6 +301,8 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
         if(t.startsWith("pres_")){
           const per=normPersona(zona.querySelector(".pe").value),cu=zona.querySelector(".cu").value;
           if(!per){toast(t==="pres_sale"?"Escribe a quién le prestaste":"Escribe quién te pagó");zona.querySelector(".pe").focus();return}
+          if(t==="pres_entra"){const d=deudas().find(x=>x.n===per),deb=d?.saldo||0,b=w.querySelector(".ok");
+            if(deb>0&&monto>deb&&!b.dataset.ok){b.dataset.ok=1;toast(`${per} solo te debe ${fmt.format(deb)}. Toca otra vez si el monto es correcto.`);return}}
           asegurarCuenta(cu);
           m={tipo:"prestamo",cat:"Préstamo",dir:t==="pres_sale"?"sale":"entra",persona:per,origen:"mes",monto,medio:cu,fecha,nota};
           if(clave){cfg.prestamos={...(cfg.prestamos||{}),[clave]:per};guardarLS(LS_C,cfg)}
@@ -297,7 +321,8 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
           if(clave&&cfg.prestamos?.[clave]){delete cfg.prestamos[clave];guardarLS(LS_C,cfg)}
         }
         m.creado=new Date().toISOString();m.detectado=true;
-        try{await store.save(m,"n"+uid());quitar(s.ids);toast(m.tipo==="prestamo"?`${m.dir==="sale"?"Préstamo a ":"Abono de "}${m.persona} · ${fmt.format(monto)}`:t==="traspaso"?`${m.medio} → ${m.hacia} · ${fmt.format(monto)}`:`${t==="gasto"?"Gasto":"Ingreso"} agregado · ${fmt.format(monto)}`)}
+        const avP=typeof avisoPresupuesto==="function"?avisoPresupuesto(m):null;
+        try{await store.save(m,"n"+uid());quitar(s.ids);if(avP)toast(avP,null,true);else toast(m.tipo==="prestamo"?`${m.dir==="sale"?"Préstamo a ":"Abono de "}${m.persona} · ${fmt.format(monto)}`:t==="traspaso"?`${m.medio} → ${m.hacia} · ${fmt.format(monto)}`:`${t==="gasto"?"Gasto":"Ingreso"} agregado · ${fmt.format(monto)}`)}
         catch{toast("No se pudo guardar")}
       };
       panel.append(w);
