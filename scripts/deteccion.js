@@ -36,7 +36,7 @@ function bancoDe(n){
   for(const f of fuentes)for(const[nombre,re]of BANCOS)if(re.test(f))return nombre;
   return (n.app||"Otra cuenta").trim();
 }
-const RE_ENTRA=/recibiste|te lleg[oó]|te enviaron|te consignaron|consignaci[oó]n|abono a tu|recibimos|ingres[oó] a tu|te transfiri/i;
+const RE_ENTRA=/recibiste|recibi[oó]|recepci[oó]n|te pagaron|te pag[oó]|le enviaron|pago recibido|ingreso de|te mand[oó]|te mandaron|te lleg[oó]|te enviaron|te consignaron|consignaci[oó]n|abono a tu|recibimos|ingres[oó] a tu|te transfiri/i;
 const RE_SALE=/transferiste|enviaste|env[ií]o de plata|pagaste|compraste|compra |pago (exitoso|de|a |por)|retiraste|retiro|d[eé]bito|cargo|giraste|recargaste/i;
 function parsearNoti(n){
   const txt=((n.titulo||"")+" · "+(n.texto||"")).replace(/\s+/g," ").trim();
@@ -112,7 +112,12 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
   .det-cfg{display:grid;gap:10px}
   .det-cfg input{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:9px 10px;width:100%}
   .det-st{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:14px}
-  .det-st b.on{color:var(--in)} .det-st b.off{color:var(--out)}`;
+  .det-st b.on{color:var(--in)} .det-st b.off{color:var(--out)}
+  .det-diag{display:flex;justify-content:space-between;gap:10px;align-items:center}
+  #detLog{display:grid;gap:8px;max-height:360px;overflow:auto}
+  .det-log-it{display:grid;gap:2px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px}
+  .det-log-it small{color:var(--muted)} .det-log-it span{word-break:break-word}
+  .det-log-it em{font-style:normal;color:var(--in)} .det-log-it em.mal{color:var(--warn)}`;
   document.head.append(st);
 
   /* --- ajustes: activar y tu nombre --- */
@@ -121,21 +126,41 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
     <p class="mini" style="margin:0">Bolsillo puede leer las notificaciones de Bancolombia, Nequi, Nu, Daviplata y otros, y mostrarte cada movimiento para que lo agregues con un toque. Todo queda en este celular.</p>
     <div class="det-st"><span>Estado: <b id="detEstado">…</b></span><button type="button" class="btn ghost" id="detActivar">Activar</button></div>
     <label class="field"><span class="label">Tu nombre como aparece en los bancos</span><input id="detNombre" maxlength="60" placeholder="Ej: Nicolás Martínez"></label>
-    <p class="mini" style="margin:0">Sirve para reconocer cuando te pasas plata a ti mismo entre tus cuentas.</p>`;
+    <p class="mini" style="margin:0">Sirve para reconocer cuando te pasas plata a ti mismo entre tus cuentas.</p>
+    <div class="det-diag"><span id="detDiag" class="mini"></span><button type="button" class="linkbtn" id="detVer">Ver lo que leyó</button></div>
+    <div id="detLog" hidden></div>`;
   const datos=[...document.querySelectorAll("#ajustes .panel-head h2")].find(h=>h.textContent==="Tus datos");
   const antes=datos?datos.closest(".panel-head").previousElementSibling:null;
   if(antes)antes.parentNode.insertBefore(cfgBox,antes);else $("ajustes").append(cfgBox);
   $("detNombre").value=cfg.nombre||"";
   $("detNombre").onchange=()=>{cfg.nombre=$("detNombre").value.trim();guardarLS(LS_C,cfg);pintar()};
   $("detActivar").onclick=async()=>{try{await NB?.abrirAjustes()}catch{toast("Abre Ajustes → Notificaciones → Acceso a notificaciones y activa Bolsillo")}};
+  let ultimoEstado=null;
+  $("detVer").onclick=async()=>{const L=$("detLog");if(!L.hidden){L.hidden=true;$("detVer").textContent="Ver lo que leyó";return}
+    let r;try{r=await NB.diagnostico()}catch{r={lista:[]}}
+    const lista=((r&&r.lista)||[]).slice().reverse();L.innerHTML="";
+    if(!lista.length)L.innerHTML=`<p class="mini" style="margin:0">Todavía no ha llegado ninguna notificación con un monto. Si te llegó una del banco y no aparece aquí, el lector no la está recibiendo.</p>`;
+    lista.forEach(n=>{const d=document.createElement("div");d.className="det-log-it";
+      const p=parsearNoti({titulo:n.titulo,texto:n.texto,app:n.app});
+      const est=!n.clave?"No parecía un movimiento":p?(p.dir==="entra"?"Entendido: entrada de ":"Entendido: salida de ")+fmt.format(p.monto):"Tenía monto pero no entendí si entra o sale";
+      d.innerHTML=`<b></b><small></small><span></span><em></em>`;
+      d.children[0].textContent=n.app||"";d.children[1].textContent=new Date(n.cuando).toLocaleString("es-CO",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"});
+      d.children[2].textContent=[n.titulo,n.texto].filter(Boolean).join(" · ");d.children[3].textContent=est;if(!p||!n.clave)d.children[3].className="mal";
+      L.append(d)});
+    L.hidden=false;$("detVer").textContent="Ocultar"};
   async function revisarEstado(){
     let disp=true;
-    try{const r=await NB?.estado();activo=!!r?.activo;if(r&&r.disponible===false)disp=false}catch{activo=false}
+    try{const r=await NB?.estado();ultimoEstado=r;activo=!!r?.activo;if(r&&r.disponible===false)disp=false}catch{activo=false}
     if(!disp){cfgBox.querySelectorAll(":scope > :not(.divider):not(.panel-head):not(.det-no)").forEach(e=>e.hidden=true);
       if(!cfgBox.querySelector(".det-no")){const p=document.createElement("p");p.className="mini det-no";p.style.margin="0";
         p.textContent="Esta versión de Bolsillo no lee notificaciones, porque Google bloquea esa función en las apps instaladas fuera de la Play Store. Para usarla, instala la versión \"con lector\".";cfgBox.append(p)}
       return}
     $("detEstado").textContent=activo?"Activado":"Desactivado";$("detEstado").className=activo?"on":"off";
+    const hace=t=>{if(!t)return"nunca";const m=Math.round((Date.now()-t)/60000);return m<1?"hace un momento":m<60?`hace ${m} min`:m<1440?`hace ${Math.round(m/60)} h`:`hace ${Math.round(m/1440)} días`};
+    const r=ultimoEstado||{};
+    $("detDiag").textContent=!activo?"":!r.conectado?"El lector todavía no se ha conectado. Apaga y vuelve a encender el permiso con \"Cambiar en Android\".":
+      `Lector conectado ${hace(r.conectado)} · ha visto ${r.vistas||0} notificaciones · la última ${hace(r.ultima)}`;
+    cfgBox.querySelector(".det-diag").hidden=!activo;
     $("detActivar").textContent=activo?"Cambiar en Android":"Activar";
   }
 
@@ -147,7 +172,10 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
     const lista=(r&&r.lista)||[];
     if(lista.length){
       const ya=new Set(crudos.map(c=>c.id));
-      lista.forEach(n=>{if(ya.has(n.id))return;const p=parsearNoti(n);if(p)crudos.push(p)});
+      lista.forEach(n=>{if(ya.has(n.id))return;let p=parsearNoti(n);
+        if(!p){const t=((n.titulo||"")+" · "+(n.texto||"")).replace(/\s+/g," ").trim(),m=montoDe(t),b=bancoDe(n);
+          if(m&&BANCOS.some(([x])=>x===b))p={id:n.id,cuando:n.cuando||Date.now(),fecha:null,monto:m,dir:/\bde\s+[A-ZÁÉÍÓÚÑ]{2,}/.test(t)?"entra":"sale",cuenta:b,destino:null,de:null,comercio:null,texto:t,app:n.app||"",dudoso:true}}
+        if(p)crudos.push(p)});
       crudos=crudos.slice(-300);guardarLS(LS_D,crudos);
       try{await NB.borrar({ids:lista.map(n=>n.id)})}catch{}
     }

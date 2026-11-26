@@ -39,13 +39,51 @@ public class NotiBancoPlugin extends Plugin {
         return l != null && !l.isEmpty();
     }
 
+    /** Xiaomi y otros a veces desconectan el lector: se le pide a Android que lo vuelva a conectar */
+    private void pedirReconexion() {
+        try {
+            if (disponible() && activo() && android.os.Build.VERSION.SDK_INT >= 24)
+                android.service.notification.NotificationListenerService.requestRebind(
+                    new android.content.ComponentName(getContext(), NotiBancoService.class));
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void load() {
+        pedirReconexion();
+    }
+
     @PluginMethod
     public void estado(PluginCall call) {
         JSObject r = new JSObject();
         boolean d = disponible();
         r.put("disponible", d);
         r.put("activo", d && activo());
+        SharedPreferences p = getContext().getSharedPreferences(NotiBancoService.PREFS, Context.MODE_PRIVATE);
+        r.put("conectado", p.getLong("conectado", 0));
+        r.put("desconectado", p.getLong("desconectado", 0));
+        r.put("vistas", p.getInt("vistas", 0));
+        r.put("ultima", p.getLong("ultima", 0));
         call.resolve(r);
+    }
+
+    @PluginMethod
+    public void reconectar(PluginCall call) {
+        pedirReconexion();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void diagnostico(PluginCall call) {
+        try {
+            SharedPreferences p = getContext().getSharedPreferences(NotiBancoService.PREFS, Context.MODE_PRIVATE);
+            JSObject r = new JSObject();
+            r.put("lista", new JSArray(p.getString(NotiBancoService.DIAG, "[]")));
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject("No se pudo leer");
+        }
     }
 
     @PluginMethod
