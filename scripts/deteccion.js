@@ -78,7 +78,29 @@ function emparejar(lista,cfg){
   }
   return out.sort((a,b)=>b.cuando-a.cuando);
 }
-if(typeof module!=="undefined")module.exports={montoDe,bancoDe,parsearNoti,emparejar,esMio};
+/* Comprobante compartido (texto leído de la imagen): Nequi, Bancolombia, Daviplata... */
+const MESES={enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,setiembre:9,octubre:10,noviembre:11,diciembre:12,ene:1,feb:2,mar:3,abr:4,may:5,jun:6,jul:7,ago:8,sep:9,oct:10,nov:11,dic:12};
+function parsearComprobante(texto){
+  const L=(texto||"").split(/\n+/).map(x=>x.trim()).filter(Boolean);const plano=L.join(" · ");
+  if(!L.length)return null;
+  const tras=re=>{const i=L.findIndex(x=>re.test(x));if(i<0)return null;const resto=L[i].replace(re,"").replace(/^[\s:?¿]+/,"").trim();return resto||L[i+1]||null};
+  // monto: el que sigue a "¿Cuánto?", "Valor", "Monto", "Total"; si no, el primero con $
+  let monto=null;
+  for(const re of [/^¿?\s*cu[aá]nto\??/i,/^valor( de la (transferencia|compra|transacci[oó]n|pago))?/i,/^monto/i,/^total/i]){const v=tras(re);if(v){const m=montoDe(/\$/.test(v)?v:"$"+v);if(m){monto=m;break}}}
+  if(!monto)monto=montoDe(plano);
+  if(!monto)return null;
+  const entra=/recibiste|te envi[oó]|te lleg[oó]|recibido|dep[oó]sito recibido/i.test(plano)&&!/env[ií]o realizado|enviaste|pagaste/i.test(plano);
+  let cuenta="Otra cuenta";for(const[n,re]of BANCOS)if(re.test(plano)){cuenta=n;break}
+  const para=tras(/^(para|destinatario|nombre del destinatario|comercio|convenio|a nombre de)\b/i);
+  const de=tras(/^(de|remitente|qui[eé]n te (lo )?envi[oó])\b/i);
+  let fecha=null;const f1=plano.match(/(\d{1,2})\s+de\s+([a-zé]+)\.?\s+(?:de\s+)?(\d{4})/i),f2=plano.match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(f1&&MESES[f1[2].toLowerCase()])fecha=`${f1[3]}-${String(MESES[f1[2].toLowerCase()]).padStart(2,"0")}-${f1[1].padStart(2,"0")}`;
+  else if(f2){const y=f2[3].length===2?"20"+f2[3]:f2[3];fecha=`${y}-${f2[2].padStart(2,"0")}-${f2[1].padStart(2,"0")}`}
+  const ref=(tras(/^(referencia|n[uú]mero de (comprobante|aprobaci[oó]n|transacci[oó]n)|comprobante( no\.?)?)\b/i)||"").replace(/\s+/g,"")||null;
+  const limpia=n=>n&&!/\d{3}/.test(n)?n.replace(/\b\w/g,c=>c.toUpperCase()):null;
+  return {monto,dir:entra?"entra":"sale",cuenta,para:limpia(para),de:limpia(de),fecha,ref};
+}
+if(typeof module!=="undefined")module.exports={montoDe,bancoDe,parsearNoti,emparejar,esMio,parsearComprobante};
 
 /* ===== Bandeja dentro de la app ===== */
 if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="function"){
@@ -266,9 +288,25 @@ if(typeof window!=="undefined"&&typeof document!=="undefined"&&typeof $==="funct
     });
   }
 
+  /* --- comprobantes compartidos con Bolsillo --- */
+  async function traerCompartidos(){
+    if(!NB)return;let r;try{r=await NB.compartidos()}catch{return}
+    const lista=(r&&r.lista)||[];let n=0;
+    lista.forEach(c=>{
+      const p=parsearComprobante(c.texto);
+      if(!p){toast(c.tipo==="error"?"No pude abrir esa imagen":"No encontré el monto en ese comprobante");return}
+      const id=p.ref?"ref-"+p.ref:c.id;if(crudos.some(x=>x.id===id))return;
+      const nombre=p.dir==="entra"?p.de:p.para;
+      const cta=p.cuenta==='Otra cuenta'?(listaCuentas().find(x=>x!=='Efectivo')||listaCuentas()[0]):p.cuenta;
+      crudos.push({id,cuando:c.cuando||Date.now(),fecha:p.fecha,monto:p.monto,dir:p.dir,cuenta:cta,destino:null,
+        de:p.dir==="entra"?(p.de||"").toUpperCase()||null:null,comercio:p.dir==="sale"?nombre:null,texto:"Comprobante compartido · "+(nombre||"")+" · "+fmt.format(p.monto),app:"Comprobante"});n++});
+    if(n){guardarLS(LS_D,crudos);abierta=true;pintar();setTimeout(()=>panel.scrollIntoView({behavior:"smooth",block:"start"}),100)}
+  }
+  try{NB?.addListener?.("compartido",()=>traerCompartidos())}catch{}
+
   /* --- cuándo revisar --- */
-  traer();
-  try{plug("App")?.addListener?.("resume",()=>traer())}catch{}
+  traer();traerCompartidos();
+  try{plug("App")?.addListener?.("resume",()=>{traer();traerCompartidos()})}catch{}
   setInterval(()=>{if(!document.hidden)traer()},30000);
   const _abrirAj=$("ajBtn").onclick;$("ajBtn").onclick=e=>{_abrirAj&&_abrirAj(e);revisarEstado()};
   window.__det={traer,pintar};

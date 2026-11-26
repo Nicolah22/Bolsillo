@@ -49,9 +49,34 @@ public class NotiBancoPlugin extends Plugin {
         }
     }
 
+    private static NotiBancoPlugin instancia;
+
     @Override
     public void load() {
+        instancia = this;
         pedirReconexion();
+    }
+
+    static void avisarCompartido() {
+        try {
+            if (instancia != null) instancia.notifyListeners("compartido", new JSObject());
+        } catch (Exception ignored) {
+        }
+    }
+
+    @PluginMethod
+    public void compartidos(PluginCall call) {
+        try {
+            JSObject r = new JSObject();
+            synchronized (Compartido.class) {
+                SharedPreferences p = getContext().getSharedPreferences(NotiBancoService.PREFS, Context.MODE_PRIVATE);
+                r.put("lista", new JSArray(p.getString(Compartido.KEY, "[]")));
+                p.edit().putString(Compartido.KEY, "[]").apply();
+            }
+            call.resolve(r);
+        } catch (Exception e) {
+            call.reject("No se pudo leer");
+        }
     }
 
     @PluginMethod
